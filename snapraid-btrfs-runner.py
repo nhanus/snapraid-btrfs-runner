@@ -16,7 +16,7 @@ from io import StringIO
 # Global variables
 config = None
 email_log = None
-
+healthchecks_log = None
 
 def tee_log(infile, out_lines, log_level):
     """
@@ -129,12 +129,44 @@ def send_email(success):
     server.quit()
 
 
+def send_healthchecks_finish(success):
+    import urllib.request
+
+    url = "{}/{}".format(config["healthchecks"]["url"],config["healthchecks"]["uuid"])
+    log = healthchecks_log.getvalue()
+    maxsize = 9500
+    if maxsize and len(log) > maxsize:
+        cut_lines = log.count("\n", maxsize // 2, -maxsize // 2)
+        log = (
+            "NOTE: Log was too big for healthchecks.io and was shortened\n\n" +
+            log[:maxsize // 2] +
+            "[...]\n\n\n --- LOG WAS TOO BIG - {} LINES REMOVED --\n\n\n[...]".format(
+                cut_lines) +
+            log[-maxsize // 2:])
+    
+    data = str.encode(log)
+    req = urllib.request.Request(url if success else url + "/fail", data=data)
+    urllib.request.urlopen(req)
+
+
+def send_healthchecks_start():
+    import urllib.request
+
+    url = "{}/{}/start".format(config["healthchecks"]["url"],config["healthchecks"]["uuid"])
+    urllib.request.urlopen(url, timeout=10)
+
+
 def finish(is_success):
     if ("error", "success")[is_success] in config["email"]["sendon"]:
         try:
             send_email(is_success)
         except Exception:
             logging.exception("Failed to send email")
+    if config["healthchecks"]["uuid"]:
+        try:
+            send_healthchecks_finish(is_success)
+        except Exception:
+            logging.exception("Failed to ping to healthchecks")
     if is_success:
         logging.info("Run finished successfully")
     else:
@@ -146,7 +178,7 @@ def load_config(args):
     global config
     parser = configparser.RawConfigParser()
     parser.read(args.conf)
-    sections = ["snapraid-btrfs", "snapper", "snapraid", "logging", "email", "smtp", "scrub"]
+    sections = ["snapraid-btrfs", "snapper", "snapraid", "logging", "healthchecks", "email", "smtp", "scrub"]
     config = dict((x, defaultdict(lambda: "")) for x in sections)
     for section in parser.sections():
         for (k, v) in parser.items(section):
@@ -227,6 +259,12 @@ def setup_logger():
             email_logger.setLevel(logging.INFO)
         root_logger.addHandler(email_logger)
 
+    if config["healthchecks"]["uuid"]:        
+        global healthchecks_log
+        healthchecks_log = StringIO()
+        healthchecks_logger = logging.StreamHandler(healthchecks_log)
+        healthchecks_logger.setFormatter(log_format)
+        root_logger.addHandler(healthchecks_logger)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -280,6 +318,12 @@ def run():
     logging.info("=" * 60)
     logging.info("Run started")
     logging.info("=" * 60)
+
+    if config["healthchecks"]["uuid"]:
+        try:
+            send_healthchecks_start()
+        except Exception:
+            logging.exception("Failed to ping to healthchecks")
 
     if shutil.which(config["snapraid"]["executable"]) is None:
         logging.error("The configured snapraid executable \"{}\" does not "

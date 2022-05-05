@@ -2,7 +2,7 @@
 
 This script is based on the [Chronial/snapraid-runner](https://github.com/Chronial/snapraid-runner)
 project and runs [snapraid-btrfs](https://github.com/automorphism88/snapraid-btrfs), sending
-its output to the console, a log file and via email. All this is configurable.
+its output to the console, a log file, via email and (healthchecks.io)[https://healthchecks.io]. All this is configurable.
 
 It can be run manually, but its main purpose is to be run via cronjob or systemd unit.
 
@@ -45,6 +45,10 @@ use as an unattended automatic snapraid tool. Features include:
 * Nothing for now
 
 ## Changelog
+
+### v0.0.3
+
+* Add (healthchecks.io)[https://healthchecks.io] integration
 
 ### v0.0.2
 
